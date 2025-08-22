@@ -263,7 +263,3 @@ View and manage:
 - Data conversions
 - Drug records
 - System status
-
-## License
-
-This project is part of the Smart Drug Cabinet System development project for Grand Brilliance Group Holdings Limited.
