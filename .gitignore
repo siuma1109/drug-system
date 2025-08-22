@@ -1,0 +1,66 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+__pypackages__/
+
+# --- Django ---
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+media/
+static/
+staticfiles/
+static_root/
+
+# Environment & tooling
+.env
+.env.*
+!.env.example
+.envrc
+.python-version
+.direnv/
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Tests & coverage
+.coverage
+coverage.xml
+*.cover
+htmlcov/
+.tox/
+.nox/
+.pytest_cache/
+.cache/
+.mypy_cache/
+.ruff_cache/
+.pytype/
+.pyre/
+
+# Editors/IDEs
+.vscode/
+.idea/
+*.iml
+
+# OS-specific
+.DS_Store
+Thumbs.db
+
+# Misc
+logs/
+pip-log.txt
+pip-delete-this-directory.txt
+.ipynb_checkpoints/
+
+
