@@ -116,10 +116,16 @@ class XMLParser(ParserInterface):
                         result['patients'].append(patient_data)
                 
                 # Handle medication information
-                medication_info = prescription.get('medication', {})
+                medication_info = prescription.get('medications', {})
                 if isinstance(medication_info, dict):
-                    drug_record = self._normalize_drug_record(medication_info, patient_info, prescription)
-                    result['drug_records'].append(drug_record)
+                    medications_list = medication_info.get('medication', [])
+                    if not isinstance(medications_list, list):
+                        medications_list = [medications_list] if medications_list else []
+                    
+                    for medication in medications_list:
+                        if isinstance(medication, dict):
+                            drug_record = self._normalize_drug_record(medication, patient_info, prescription)
+                            result['drug_records'].append(drug_record)
         
         return result
     

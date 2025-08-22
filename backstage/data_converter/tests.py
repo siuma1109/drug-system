@@ -77,7 +77,8 @@ class XMLParserTests(DataConverterTestCase):
     def test_drug_data_extraction(self):
         """Test drug data extraction from XML"""
         parsed_data = self.xml_parser.parse(self.sample_xml)
-        drug_records = self.xml_parser.extract_drug_data(parsed_data)
+        drug_data = self.xml_parser.extract_drug_data(parsed_data)
+        drug_records = drug_data.get('drug_records', [])
         
         self.assertEqual(len(drug_records), 2)
         self.assertEqual(drug_records[0]['drug_name'], 'Aspirin')
@@ -108,7 +109,8 @@ class HL7ParserTests(DataConverterTestCase):
     def test_drug_data_extraction(self):
         """Test drug data extraction from HL7"""
         parsed_data = self.hl7_parser.parse(self.sample_hl7)
-        drug_records = self.hl7_parser.extract_drug_data(parsed_data)
+        drug_data = self.hl7_parser.extract_drug_data(parsed_data, [])
+        drug_records = drug_data.get('drug_records', [])
         
         self.assertEqual(len(drug_records), 2)
         self.assertIn('Aspirin', drug_records[0]['drug_name'])
@@ -206,7 +208,7 @@ class APIEndpointTests(DataConverterTestCase):
         }
         
         response = self.client.post(
-            '/api/conversions/',
+            '/api/conversions',
             data=json.dumps(data),
             content_type='application/json'
         )
@@ -225,7 +227,7 @@ class APIEndpointTests(DataConverterTestCase):
         }
         
         response = self.client.post(
-            '/api/conversions/',
+            '/api/conversions',
             data=json.dumps(data),
             content_type='application/json'
         )
@@ -245,7 +247,7 @@ class APIEndpointTests(DataConverterTestCase):
         }
         
         response = self.client.post(
-            '/api/conversions/',
+            '/api/conversions',
             data=json.dumps(data),
             content_type='application/json'
         )
@@ -263,7 +265,7 @@ class APIEndpointTests(DataConverterTestCase):
         conversion_id = self.conversion_manager.create_conversion('XML', self.sample_xml)
         
         # Then process it
-        response = self.client.post(f'/api/conversions/{conversion_id}/process/')
+        response = self.client.post(f'/api/conversions/{conversion_id}/process')
         
         self.assertEqual(response.status_code, 200)
         response_data = json.loads(response.content)
@@ -273,7 +275,7 @@ class APIEndpointTests(DataConverterTestCase):
         """Test get conversion status endpoint"""
         conversion_id = self.conversion_manager.create_conversion('XML', self.sample_xml)
         
-        response = self.client.get(f'/api/conversions/{conversion_id}/status/')
+        response = self.client.get(f'/api/conversions/{conversion_id}/status')
         
         self.assertEqual(response.status_code, 200)
         response_data = json.loads(response.content)
@@ -286,7 +288,7 @@ class APIEndpointTests(DataConverterTestCase):
         self.conversion_manager.create_conversion('XML', self.sample_xml)
         self.conversion_manager.create_conversion('HL7', self.sample_hl7)
         
-        response = self.client.get('/api/conversions/list/')
+        response = self.client.get('/api/conversions/list')
         
         self.assertEqual(response.status_code, 200)
         response_data = json.loads(response.content)
@@ -297,7 +299,7 @@ class APIEndpointTests(DataConverterTestCase):
         conversion_id = self.conversion_manager.create_conversion('XML', self.sample_xml)
         self.conversion_manager.process_conversion(conversion_id, self.xml_parser)
         
-        response = self.client.get(f'/api/conversions/{conversion_id}/drug-records/')
+        response = self.client.get(f'/api/conversions/{conversion_id}/drug-records')
         
         self.assertEqual(response.status_code, 200)
         response_data = json.loads(response.content)
@@ -334,7 +336,7 @@ class ModelTests(DataConverterTestCase):
             dosage='81mg',
             strength='81mg',
             quantity=30,
-            patient_id='PAT001',
+            original_patient_id='PAT001',
             prescription_id='RX001'
         )
         
@@ -354,7 +356,7 @@ class IntegrationTests(DataConverterTestCase):
         }
         
         response = self.client.post(
-            '/api/conversions/',
+            '/api/conversions',
             data=json.dumps(data),
             content_type='application/json'
         )
@@ -363,17 +365,17 @@ class IntegrationTests(DataConverterTestCase):
         conversion_id = json.loads(response.content)['conversion_id']
         
         # Process conversion
-        response = self.client.post(f'/api/conversions/{conversion_id}/process/')
+        response = self.client.post(f'/api/conversions/{conversion_id}/process')
         self.assertEqual(response.status_code, 200)
         
         # Check status
-        response = self.client.get(f'/api/conversions/{conversion_id}/status/')
+        response = self.client.get(f'/api/conversions/{conversion_id}/status')
         self.assertEqual(response.status_code, 200)
         status_data = json.loads(response.content)
         self.assertEqual(status_data['status'], 'COMPLETED')
         
         # Check drug records
-        response = self.client.get(f'/api/conversions/{conversion_id}/drug-records/')
+        response = self.client.get(f'/api/conversions/{conversion_id}/drug-records')
         self.assertEqual(response.status_code, 200)
         drug_data = json.loads(response.content)
         self.assertEqual(drug_data['total_count'], 2)
@@ -387,7 +389,7 @@ class IntegrationTests(DataConverterTestCase):
         }
         
         response = self.client.post(
-            '/api/conversions/',
+            '/api/conversions',
             data=json.dumps(data),
             content_type='application/json'
         )
@@ -396,17 +398,17 @@ class IntegrationTests(DataConverterTestCase):
         conversion_id = json.loads(response.content)['conversion_id']
         
         # Process conversion
-        response = self.client.post(f'/api/conversions/{conversion_id}/process/')
+        response = self.client.post(f'/api/conversions/{conversion_id}/process')
         self.assertEqual(response.status_code, 200)
         
         # Check status
-        response = self.client.get(f'/api/conversions/{conversion_id}/status/')
+        response = self.client.get(f'/api/conversions/{conversion_id}/status')
         self.assertEqual(response.status_code, 200)
         status_data = json.loads(response.content)
         self.assertEqual(status_data['status'], 'COMPLETED')
         
         # Check drug records
-        response = self.client.get(f'/api/conversions/{conversion_id}/drug-records/')
+        response = self.client.get(f'/api/conversions/{conversion_id}/drug-records')
         self.assertEqual(response.status_code, 200)
         drug_data = json.loads(response.content)
         self.assertGreater(drug_data['total_count'], 0)
