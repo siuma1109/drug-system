@@ -65,7 +65,7 @@ fun DrugSystemBottomNavigation(
         BottomNavItem.Inventory,
         BottomNavItem.Scan,
         BottomNavItem.Patients,
-        BottomNavItem.Devices
+        //BottomNavItem.Devices
     )
 ) {
     val navBackStackEntry by navController.currentBackStackEntryAsState()

@@ -34,9 +34,9 @@ fun DrugSystemNavHost(navController: NavHostController) {
             PatientsScreen(navController = navController)
         }
         
-        composable(Routes.DEVICES) {
-            DevicesScreen(navController = navController)
-        }
+        // composable(Routes.DEVICES) {
+        //     DevicesScreen(navController = navController)
+        // }
         
         composable(
             route = "${Routes.INVENTORY}/detail/{drugId}",

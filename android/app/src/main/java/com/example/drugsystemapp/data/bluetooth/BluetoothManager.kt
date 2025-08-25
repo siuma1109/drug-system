@@ -4,12 +4,31 @@ import android.Manifest
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
+import android.bluetooth.le.BluetoothLeScanner
+import android.bluetooth.le.ScanCallback
+import android.bluetooth.le.ScanResult
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.provider.Settings
 import androidx.core.app.ActivityCompat
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+
+data class BluetoothDeviceInfo(
+    val device: BluetoothDevice,
+    val name: String,
+    val address: String,
+    val bondState: Int,
+    val deviceType: Int,
+    val rssi: Int = 0
+) {
+    val isBonded: Boolean get() = bondState == BluetoothDevice.BOND_BONDED
+    val displayName: String get() = name.ifEmpty { "Unknown Device" }
+}
 
 class BluetoothManager(private val context: Context) {
     
@@ -21,8 +40,12 @@ class BluetoothManager(private val context: Context) {
         bluetoothManager.adapter
     }
     
-    private val _devices = MutableStateFlow<List<BluetoothDevice>>(emptyList())
-    val devices: StateFlow<List<BluetoothDevice>> = _devices
+    private val bluetoothLeScanner: BluetoothLeScanner? by lazy {
+        bluetoothAdapter?.bluetoothLeScanner
+    }
+    
+    private val _devices = MutableStateFlow<List<BluetoothDeviceInfo>>(emptyList())
+    val devices: StateFlow<List<BluetoothDeviceInfo>> = _devices
     
     private val _isScanning = MutableStateFlow(false)
     val isScanning: StateFlow<Boolean> = _isScanning
@@ -30,7 +53,8 @@ class BluetoothManager(private val context: Context) {
     private val _connectionState = MutableStateFlow<BluetoothConnectionState>(BluetoothConnectionState.Disconnected)
     val connectionState: StateFlow<BluetoothConnectionState> = _connectionState
     
-    private var scanCallback: android.bluetooth.BluetoothAdapter.LeScanCallback? = null
+    private var scanCallback: ScanCallback? = null
+    private val handler = Handler(Looper.getMainLooper())
     
     init {
         initializeBluetooth()
@@ -53,6 +77,20 @@ class BluetoothManager(private val context: Context) {
         return bluetoothAdapter?.isEnabled == true
     }
     
+    fun enableBluetooth() {
+        // For all versions, we need to show settings panel
+        val intent = Intent(Settings.ACTION_BLUETOOTH_SETTINGS)
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        context.startActivity(intent)
+    }
+    
+    fun disableBluetooth() {
+        // For all versions, we need to show settings panel
+        val intent = Intent(Settings.ACTION_BLUETOOTH_SETTINGS)
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        context.startActivity(intent)
+    }
+    
     fun hasBluetoothPermission(): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             ActivityCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED &&
@@ -72,22 +110,47 @@ class BluetoothManager(private val context: Context) {
         _isScanning.value = true
         _devices.value = emptyList()
         
-        scanCallback = object : android.bluetooth.BluetoothAdapter.LeScanCallback {
-            override fun onLeScan(device: BluetoothDevice?, rssi: Int, scanRecord: ByteArray?) {
-                device?.let {
-                    if (!_devices.value.contains(it)) {
-                        _devices.value = _devices.value + it
-                    }
+        // Get paired devices first
+        val pairedDevices = getPairedDevicesInfo()
+        _devices.value = pairedDevices
+        
+        // Start scanning for new devices using modern API
+        scanCallback = object : ScanCallback() {
+            override fun onScanResult(callbackType: Int, result: ScanResult) {
+                val device = result.device
+                val deviceInfo = BluetoothDeviceInfo(
+                    device = device,
+                    name = device.name ?: "",
+                    address = device.address,
+                    bondState = device.bondState,
+                    deviceType = device.type,
+                    rssi = result.rssi
+                )
+                
+                if (!_devices.value.any { d -> d.address == deviceInfo.address }) {
+                    _devices.value = _devices.value + deviceInfo
                 }
+            }
+            
+            override fun onScanFailed(errorCode: Int) {
+                _isScanning.value = false
             }
         }
         
-        bluetoothAdapter?.startLeScan(scanCallback)
+        try {
+            bluetoothLeScanner?.startScan(scanCallback)
+        } catch (e: Exception) {
+            _isScanning.value = false
+        }
     }
     
     fun stopScan() {
         scanCallback?.let {
-            bluetoothAdapter?.stopLeScan(it)
+            try {
+                bluetoothLeScanner?.stopScan(it)
+            } catch (e: Exception) {
+                // Ignore cleanup errors
+            }
         }
         _isScanning.value = false
     }
@@ -124,6 +187,22 @@ class BluetoothManager(private val context: Context) {
         }
         
         return bluetoothAdapter?.bondedDevices?.toList() ?: emptyList()
+    }
+    
+    fun getPairedDevicesInfo(): List<BluetoothDeviceInfo> {
+        if (!hasBluetoothPermission()) {
+            return emptyList()
+        }
+        
+        return bluetoothAdapter?.bondedDevices?.map { device ->
+            BluetoothDeviceInfo(
+                device = device,
+                name = device.name ?: "",
+                address = device.address,
+                bondState = device.bondState,
+                deviceType = device.type
+            )
+        } ?: emptyList()
     }
     
     fun getDeviceByAddress(address: String): BluetoothDevice? {

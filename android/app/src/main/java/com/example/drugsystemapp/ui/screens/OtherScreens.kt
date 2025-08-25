@@ -1,9 +1,13 @@
 package com.example.drugsystemapp.ui.screens
 
+import android.content.Intent
+import android.provider.Settings
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -11,16 +15,24 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import com.example.drugsystemapp.data.bluetooth.BluetoothManager
+import com.example.drugsystemapp.data.bluetooth.BluetoothDeviceInfo
 import com.example.drugsystemapp.data.models.*
 import com.example.drugsystemapp.data.repository.DrugRepository
+import com.example.drugsystemapp.data.wifi.WiFiManager
+import com.example.drugsystemapp.data.wifi.WiFiNetwork
 import com.example.drugsystemapp.ui.theme.*
 import com.example.drugsystemapp.ui.viewmodel.DrugViewModel
 import com.example.drugsystemapp.ui.viewmodel.DrugViewModelFactory
 import com.example.drugsystemapp.data.models.UiState
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -124,7 +136,12 @@ fun PatientsScreen(
                 else -> {
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(16.dp),
+                        contentPadding = PaddingValues(
+                            start = 16.dp,
+                            end = 16.dp,
+                            top = 16.dp,
+                            bottom = 80.dp // Add bottom padding to avoid navbar overlap
+                        ),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         items(filteredPatients) { patient ->
@@ -196,24 +213,30 @@ fun DevicesScreen(
     navController: NavController,
     viewModel: DrugViewModel = viewModel(factory = DrugViewModelFactory(DrugRepository(navController.context)))
 ) {
-    LaunchedEffect(Unit) {
-        viewModel.loadRfidDeviceStatus()
-        viewModel.loadBluetoothDevices()
+    val bluetoothManager = remember { BluetoothManager(navController.context) }
+    val wifiManager = remember { WiFiManager(navController.context) }
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    
+    // Clean up when screen is disposed
+    DisposableEffect(Unit) {
+        onDispose {
+            bluetoothManager.stopScan()
+            wifiManager.stopNetworkScan()
+        }
     }
     
-    val rfidState by viewModel.rfidDeviceState.collectAsState()
-    val bluetoothState by viewModel.bluetoothDeviceState.collectAsState()
-    val connectionState by viewModel.connectionState.collectAsState()
+    val wifiNetworks by wifiManager.availableNetworks.collectAsState()
+    val bluetoothDevices by bluetoothManager.devices.collectAsState()
+    val isScanningWifi by wifiManager.isScanning.collectAsState()
+    val isScanningBluetooth by bluetoothManager.isScanning.collectAsState()
     
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Devices") },
                 actions = {
-                    IconButton(onClick = { 
-                        viewModel.loadRfidDeviceStatus()
-                        viewModel.loadBluetoothDevices()
-                    }) {
+                    IconButton(onClick = { /* Refresh functionality */ }) {
                         Icon(Icons.Default.Refresh, contentDescription = "Refresh")
                     }
                 }
@@ -224,47 +247,13 @@ fun DevicesScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .padding(16.dp),
+                .padding(16.dp)
+                .verticalScroll(rememberScrollState()) // Make screen scrollable
+                .padding(bottom = 80.dp), // Add bottom padding to avoid navbar overlap
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Device Status Overview
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer
-                )
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp)
-                ) {
-                    Text(
-                        text = "Device Status Overview",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceEvenly
-                    ) {
-                        DeviceOverviewCard(
-                            title = "RFID Readers",
-                            online = rfidState.data?.count { it.status == "ONLINE" } ?: 0,
-                            total = rfidState.data?.size ?: 0,
-                            color = PrimaryBlue
-                        )
-                        DeviceOverviewCard(
-                            title = "Bluetooth",
-                            online = bluetoothState.data?.count { it.status == "ONLINE" } ?: 0,
-                            total = bluetoothState.data?.size ?: 0,
-                            color = SecondaryGreen
-                        )
-                    }
-                }
-            }
             
-            // RFID Devices
+            // WiFi Networks
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(
@@ -274,28 +263,101 @@ fun DevicesScreen(
                 Column(
                     modifier = Modifier.padding(16.dp)
                 ) {
-                    Text(
-                        text = "RFID Readers",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "WiFi Networks",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Button(
+                            onClick = { 
+                                if (!wifiManager.isWiFiEnabled()) {
+                                    wifiManager.enableWiFi()
+                                } else {
+                                    wifiManager.startNetworkScan()
+                                }
+                            },
+                            enabled = !isScanningWifi
+                        ) {
+                            if (isScanningWifi) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Scanning...")
+                            } else {
+                                Text(if (wifiManager.isWiFiEnabled()) "Scan" else "Enable WiFi")
+                            }
+                        }
+                    }
                     Spacer(modifier = Modifier.height(16.dp))
                     
-                    if (rfidState.isLoading) {
-                        Box(
-                            modifier = Modifier.fillMaxWidth(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            CircularProgressIndicator()
-                        }
-                    } else if (rfidState.data?.isEmpty() != false) {
+                    if (!wifiManager.isWiFiEnabled()) {
                         Text(
-                            text = "No RFID devices found",
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            text = "WiFi is disabled. Tap 'Enable WiFi' to turn it on.",
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                            style = MaterialTheme.typography.bodyMedium
                         )
-                    } else {
-                        // RFID device list would go here
-                        Text("RFID device management functionality")
+                    } else if (wifiNetworks.isEmpty() && !isScanningWifi) {
+                        Text(
+                            text = "No WiFi networks found. Tap 'Scan' to search for networks.",
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    } else if (wifiNetworks.isNotEmpty()) {
+                        LazyColumn(
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(wifiNetworks) { network ->
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.primaryContainer
+                                    )
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(16.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Wifi,
+                                                contentDescription = "WiFi Network",
+                                                tint = MaterialTheme.colorScheme.onPrimaryContainer
+                                            )
+                                            Spacer(modifier = Modifier.width(12.dp))
+                                            Column {
+                                                Text(
+                                                    text = network.ssid.ifEmpty { "Hidden Network" },
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                                )
+                                                Text(
+                                                    text = "${network.signalStrength} dBm • ${if (network.isSecured) "Secured" else "Open"}",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                                                )
+                                            }
+                                        }
+                                        Icon(
+                                            imageVector = Icons.Default.ChevronRight,
+                                            contentDescription = "Connect",
+                                            tint = MaterialTheme.colorScheme.onPrimaryContainer
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -321,33 +383,90 @@ fun DevicesScreen(
                             fontWeight = FontWeight.Bold
                         )
                         Button(
-                            onClick = { /* Scan for devices */ },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.primary
-                            )
+                            onClick = { 
+                                if (!bluetoothManager.isBluetoothEnabled()) {
+                                    bluetoothManager.enableBluetooth()
+                                } else {
+                                    bluetoothManager.startScan()
+                                }
+                            },
+                            enabled = !isScanningBluetooth
                         ) {
-                            Icon(Icons.Default.Bluetooth, contentDescription = "Scan")
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Scan")
+                            if (isScanningBluetooth) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Scanning...")
+                            } else {
+                                Text(if (bluetoothManager.isBluetoothEnabled()) "Scan" else "Enable Bluetooth")
+                            }
                         }
                     }
                     Spacer(modifier = Modifier.height(16.dp))
                     
-                    if (bluetoothState.isLoading) {
-                        Box(
-                            modifier = Modifier.fillMaxWidth(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            CircularProgressIndicator()
-                        }
-                    } else if (bluetoothState.data?.isEmpty() != false) {
+                    if (!bluetoothManager.isBluetoothEnabled()) {
                         Text(
-                            text = "No Bluetooth devices found",
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            text = "Bluetooth is disabled. Tap 'Enable Bluetooth' to turn it on.",
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                            style = MaterialTheme.typography.bodyMedium
                         )
-                    } else {
-                        // Bluetooth device list would go here
-                        Text("Bluetooth device management functionality")
+                    } else if (bluetoothDevices.isEmpty() && !isScanningBluetooth) {
+                        Text(
+                            text = "No Bluetooth devices found. Tap 'Scan' to search for devices.",
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    } else if (bluetoothDevices.isNotEmpty()) {
+                        LazyColumn(
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(bluetoothDevices) { device ->
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.secondaryContainer
+                                    )
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(16.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Bluetooth,
+                                                contentDescription = "Bluetooth Device",
+                                                tint = MaterialTheme.colorScheme.onSecondaryContainer
+                                            )
+                                            Spacer(modifier = Modifier.width(12.dp))
+                                            Column {
+                                                Text(
+                                                    text = device.displayName,
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                                                )
+                                                Text(
+                                                    text = "${device.address} • ${if (device.isBonded) "Paired" else "Available"}",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
+                                                )
+                                            }
+                                        }
+                                        Icon(
+                                            imageVector = Icons.Default.ChevronRight,
+                                            contentDescription = "Connect",
+                                            tint = MaterialTheme.colorScheme.onSecondaryContainer
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -355,36 +474,15 @@ fun DevicesScreen(
     }
 }
 
-@Composable
-fun DeviceOverviewCard(title: String, online: Int, total: Int, color: androidx.compose.ui.graphics.Color) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            text = "$online/$total",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-            color = if (online > 0) color else ErrorRed
-        )
-        Text(
-            text = title,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onPrimaryContainer
-        )
-        Text(
-            text = "Online",
-            style = MaterialTheme.typography.bodySmall,
-            color = if (online > 0) color else ErrorRed
-        )
-    }
-}
 
 @Composable
 fun SettingsScreen(navController: NavController) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp),
+            .padding(16.dp)
+            .verticalScroll(rememberScrollState()) // Make screen scrollable
+            .padding(bottom = 80.dp), // Add bottom padding to avoid navbar overlap
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Text(
@@ -421,7 +519,9 @@ fun DrugDetailScreen(navController: NavController, drugId: Int?) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp),
+            .padding(16.dp)
+            .verticalScroll(rememberScrollState()) // Make screen scrollable
+            .padding(bottom = 80.dp), // Add bottom padding to avoid navbar overlap
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
@@ -441,7 +541,9 @@ fun PatientDetailScreen(navController: NavController, patientId: Int?) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp),
+            .padding(16.dp)
+            .verticalScroll(rememberScrollState()) // Make screen scrollable
+            .padding(bottom = 80.dp), // Add bottom padding to avoid navbar overlap
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {

@@ -1,6 +1,7 @@
 package com.example.drugsystemapp.ui.screens
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -9,8 +10,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
@@ -45,6 +49,7 @@ fun ScanScreen(
     var lastScannedDrug by remember { mutableStateOf<DrugInventory?>(null) }
     var manualRfidInput by remember { mutableStateOf("") }
     var showManualInput by remember { mutableStateOf(false) }
+    var lastScanResult by remember { mutableStateOf<String?>(null) }
     
     val context = LocalContext.current
     val scanState by viewModel.scanState.collectAsState()
@@ -65,6 +70,7 @@ fun ScanScreen(
         contract = ScanContract()
     ) { result ->
         result.contents?.let { scannedData ->
+            lastScanResult = scannedData
             scanDrug(viewModel, scannedData, "QR Scanner")
         }
     }
@@ -96,7 +102,7 @@ fun ScanScreen(
                 title = { Text("Scan Drug") },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 }
             )
@@ -106,7 +112,9 @@ fun ScanScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .background(MaterialTheme.colorScheme.background),
+                .background(MaterialTheme.colorScheme.background)
+                .verticalScroll(rememberScrollState()) // Make screen scrollable
+                .padding(bottom = 80.dp), // Add bottom padding to avoid navbar overlap
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
@@ -137,22 +145,11 @@ fun ScanScreen(
                             title = "QR Code",
                             icon = Icons.Default.QrCodeScanner,
                             isSelected = scanMode == ScanMode.QR_CODE,
-                            onClick = { scanMode = ScanMode.QR_CODE },
+                            onClick = { 
+                                scanMode = ScanMode.QR_CODE
+                                lastScanResult = null
+                            },
                             color = PrimaryBlue
-                        )
-                        ScanModeCard(
-                            title = "RFID/NFC",
-                            icon = Icons.Default.Nfc,
-                            isSelected = scanMode == ScanMode.RFID,
-                            onClick = { scanMode = ScanMode.RFID },
-                            color = SecondaryGreen
-                        )
-                        ScanModeCard(
-                            title = "Manual",
-                            icon = Icons.Default.Keyboard,
-                            isSelected = scanMode == ScanMode.MANUAL,
-                            onClick = { scanMode = ScanMode.MANUAL },
-                            color = AccentOrange
                         )
                     }
                 }
@@ -183,16 +180,6 @@ fun ScanScreen(
                                         cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
                                     }
                                 }
-                                ScanMode.RFID -> {
-                                    if (hasNfcPermission(context)) {
-                                        Toast.makeText(context, "Tap RFID tag to scan", Toast.LENGTH_SHORT).show()
-                                    } else {
-                                        nfcPermissionLauncher.launch(Manifest.permission.NFC)
-                                    }
-                                }
-                                ScanMode.MANUAL -> {
-                                    showManualInput = true
-                                }
                             }
                         },
                     contentAlignment = Alignment.Center
@@ -204,8 +191,6 @@ fun ScanScreen(
                         Icon(
                             imageVector = when (scanMode) {
                                 ScanMode.QR_CODE -> Icons.Default.QrCodeScanner
-                                ScanMode.RFID -> Icons.Default.Nfc
-                                ScanMode.MANUAL -> Icons.Default.Keyboard
                             },
                             contentDescription = "Scan",
                             modifier = Modifier.size(64.dp),
@@ -215,8 +200,6 @@ fun ScanScreen(
                         Text(
                             text = when (scanMode) {
                                 ScanMode.QR_CODE -> "Tap to scan QR code"
-                                ScanMode.RFID -> "Tap to enable RFID"
-                                ScanMode.MANUAL -> "Tap for manual input"
                             },
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurface
@@ -247,50 +230,50 @@ fun ScanScreen(
                     Text(
                         text = when (scanMode) {
                             ScanMode.QR_CODE -> "Point camera at QR code on drug packaging"
-                            ScanMode.RFID -> "Ensure NFC is enabled and tap RFID tag"
-                            ScanMode.MANUAL -> "Enter RFID tag number manually"
                         },
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onPrimaryContainer
                     )
                 }
             }
-        }
-    }
-    
-    // Manual Input Dialog
-    if (showManualInput) {
-        AlertDialog(
-            onDismissRequest = { showManualInput = false },
-            title = { Text("Manual RFID Input") },
-            text = {
-                OutlinedTextField(
-                    value = manualRfidInput,
-                    onValueChange = { manualRfidInput = it },
-                    placeholder = { Text("Enter RFID tag number") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        if (manualRfidInput.isNotBlank()) {
-                            scanDrug(viewModel, manualRfidInput, "Manual Input")
-                            showManualInput = false
-                            manualRfidInput = ""
-                        }
-                    }
+            
+            // Scan Result Display
+            if (lastScanResult != null) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer
+                    )
                 ) {
-                    Text("Scan")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showManualInput = false }) {
-                    Text("Cancel")
+                    Column(
+                        modifier = Modifier.padding(16.dp)
+                    ) {
+                        Text(
+                            text = "Scan Result",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Scanned Data: ${lastScanResult}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Scan Mode: ${when (scanMode) {
+                                ScanMode.QR_CODE -> "QR Code"
+                            }}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f)
+                        )
+                    }
                 }
             }
-        )
+        }
     }
     
     // Result Dialog
@@ -376,8 +359,6 @@ fun ScanModeCard(
 
 enum class ScanMode {
     QR_CODE,
-    RFID,
-    MANUAL
 }
 
 fun hasCameraPermission(context: android.content.Context): Boolean {

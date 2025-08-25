@@ -34,8 +34,6 @@ fun DashboardScreen(
     LaunchedEffect(Unit) {
         viewModel.loadDrugInventory()
         viewModel.loadPatients()
-        viewModel.loadRfidDeviceStatus()
-        viewModel.loadBluetoothDevices()
     }
     
     Scaffold(
@@ -66,7 +64,12 @@ fun DashboardScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
                 .background(MaterialTheme.colorScheme.background),
-            contentPadding = PaddingValues(16.dp),
+            contentPadding = PaddingValues(
+                start = 16.dp,
+                end = 16.dp,
+                top = 16.dp,
+                bottom = 80.dp // Add bottom padding to avoid navbar overlap
+            ),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item {
@@ -77,17 +80,9 @@ fun DashboardScreen(
                 QuickStatsSection(viewModel)
             }
             
-            item {
-                QuickActionsSection(navController)
-            }
-            
-            item {
-                RecentActivitySection(viewModel, navController)
-            }
-            
-            item {
-                DeviceStatusSection(viewModel, navController)
-            }
+            // item {
+            //     QuickActionsSection(navController)
+            // }
         }
     }
     
@@ -101,8 +96,6 @@ fun DashboardScreen(
                     showRefreshDialog = false
                     viewModel.loadDrugInventory()
                     viewModel.loadPatients()
-                    viewModel.loadRfidDeviceStatus()
-                    viewModel.loadBluetoothDevices()
                 }) {
                     Text("Refresh")
                 }
@@ -291,112 +284,3 @@ fun ActionButton(title: String, icon: ImageVector, onClick: () -> Unit, color: a
     }
 }
 
-@Composable
-fun RecentActivitySection(viewModel: DrugViewModel, navController: NavController) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        )
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Recent Activity",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-            
-            // Placeholder for recent activity
-            Text(
-                text = "No recent activity",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-            )
-        }
-    }
-}
-
-@Composable
-fun DeviceStatusSection(viewModel: DrugViewModel, navController: NavController) {
-    val rfidState by viewModel.rfidDeviceState.collectAsState()
-    val bluetoothState by viewModel.bluetoothDeviceState.collectAsState()
-    
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        )
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Device Status",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
-                )
-                TextButton(onClick = { navController.navigate(Routes.DEVICES) }) {
-                    Text("View All")
-                }
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-            
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly
-            ) {
-                DeviceStatusCard(
-                    title = "RFID Readers",
-                    onlineCount = rfidState.data?.count { it.status == "ONLINE" } ?: 0,
-                    totalCount = rfidState.data?.size ?: 0,
-                    color = PrimaryBlue
-                )
-                DeviceStatusCard(
-                    title = "Bluetooth",
-                    onlineCount = bluetoothState.data?.count { it.status == "ONLINE" } ?: 0,
-                    totalCount = bluetoothState.data?.size ?: 0,
-                    color = SecondaryGreen
-                )
-            }
-        }
-    }
-}
-
-@Composable
-fun DeviceStatusCard(title: String, onlineCount: Int, totalCount: Int, color: androidx.compose.ui.graphics.Color) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.padding(horizontal = 8.dp)
-    ) {
-        Text(
-            text = "$onlineCount/$totalCount",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-            color = if (onlineCount > 0) color else ErrorRed
-        )
-        Text(
-            text = title,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-        Text(
-            text = "Online",
-            style = MaterialTheme.typography.bodySmall,
-            color = if (onlineCount > 0) color else ErrorRed
-        )
-    }
-}

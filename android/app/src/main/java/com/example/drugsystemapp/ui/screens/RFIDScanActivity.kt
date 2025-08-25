@@ -6,12 +6,16 @@ import android.content.IntentFilter
 import android.nfc.NfcAdapter
 import android.nfc.Tag
 import android.nfc.tech.Ndef
+import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -33,43 +37,63 @@ class RFIDScanActivity : ComponentActivity() {
     private var nfcAdapter: NfcAdapter? = null
     private var pendingIntent: PendingIntent? = null
     private var viewModel: DrugViewModel? = null
+    private var lastScanResult: String? = null
+    private var scanResultState: MutableState<String?>? = null
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        nfcAdapter = NfcAdapter.getDefaultAdapter(this)
-        pendingIntent = PendingIntent.getActivity(
-            this, 0, Intent(this, javaClass).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP), 0
-        )
-        
-        setContent {
-            DrugSystemAppTheme {
-                val repository = DrugRepository(this)
-                viewModel = viewModel(factory = DrugViewModelFactory(repository))
-                
-                RFIDScanScreen(
-                    viewModel = viewModel!!,
-                    onBack = { finish() },
-                    onScanComplete = { drug ->
-                        val resultIntent = Intent().apply {
-                            putExtra("scanned_drug_id", drug.id)
-                            putExtra("scanned_drug_name", drug.drugName)
-                            putExtra("scanned_drug_rfid", drug.rfidTag)
-                        }
-                        setResult(RESULT_OK, resultIntent)
-                        finish()
-                    }
-                )
+        try {
+            nfcAdapter = NfcAdapter.getDefaultAdapter(this)
+            if (nfcAdapter == null) {
+                // Device doesn't support NFC
+                Toast.makeText(this, "This device doesn't support NFC", Toast.LENGTH_SHORT).show()
+                finish()
+                return
             }
+            
+            pendingIntent = PendingIntent.getActivity(
+                this, 0, Intent(this, javaClass).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP), 0
+            )
+            
+            setContent {
+                DrugSystemAppTheme {
+                    val repository = DrugRepository(this)
+                    viewModel = viewModel(factory = DrugViewModelFactory(repository))
+                    scanResultState = mutableStateOf(lastScanResult)
+                    
+                    RFIDScanScreen(
+                        viewModel = viewModel!!,
+                        onBack = { finish() },
+                        onScanComplete = { drug ->
+                            val resultIntent = Intent().apply {
+                                putExtra("scanned_drug_id", drug.id)
+                                putExtra("scanned_drug_name", drug.drugName)
+                                putExtra("scanned_drug_rfid", drug.rfidTag)
+                            }
+                            setResult(RESULT_OK, resultIntent)
+                            finish()
+                        },
+                        scanResult = scanResultState?.value
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            Toast.makeText(this, "Error initializing NFC: ${e.message}", Toast.LENGTH_SHORT).show()
+            finish()
         }
     }
     
     override fun onResume() {
         super.onResume()
-        nfcAdapter?.let {
-            val intentFilter = arrayOf(IntentFilter(NfcAdapter.ACTION_TECH_DISCOVERED))
-            val techLists = arrayOf(arrayOf(Ndef::class.java.name))
-            it.enableForegroundDispatch(this, pendingIntent, intentFilter, techLists)
+        try {
+            nfcAdapter?.let {
+                val intentFilter = arrayOf(IntentFilter(NfcAdapter.ACTION_TECH_DISCOVERED))
+                val techLists = arrayOf(arrayOf(Ndef::class.java.name))
+                it.enableForegroundDispatch(this, pendingIntent, intentFilter, techLists)
+            }
+        } catch (e: Exception) {
+            Toast.makeText(this, "Error enabling NFC dispatch: ${e.message}", Toast.LENGTH_SHORT).show()
         }
     }
     
@@ -80,23 +104,39 @@ class RFIDScanActivity : ComponentActivity() {
     
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        if (intent.action == NfcAdapter.ACTION_TECH_DISCOVERED) {
-            val tag = intent.getParcelableExtra<Tag>(NfcAdapter.EXTRA_TAG)
-            tag?.let {
-                val rfidData = readRFIDTag(it)
-                rfidData?.let { data ->
-                    viewModel?.scanDrug(data, "RFID Scanner")
+        try {
+            if (intent.action == NfcAdapter.ACTION_TECH_DISCOVERED) {
+                val tag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    intent.getParcelableExtra(NfcAdapter.EXTRA_TAG, Tag::class.java)
+                } else {
+                    @Suppress("DEPRECATION")
+                    intent.getParcelableExtra<Tag>(NfcAdapter.EXTRA_TAG)
+                }
+                tag?.let {
+                    val rfidData = readRFIDTag(it)
+                    rfidData?.let { data ->
+                        lastScanResult = data
+                        scanResultState?.value = data
+                        viewModel?.scanDrug(data, "RFID Scanner")
+                    }
                 }
             }
+        } catch (e: Exception) {
+            Toast.makeText(this, "Error processing NFC tag: ${e.message}", Toast.LENGTH_SHORT).show()
         }
     }
     
     private fun readRFIDTag(tag: Tag): String? {
         return try {
             val ndef = Ndef.get(tag)
-            ndef?.connect()
-            val message = ndef?.ndefMessage
-            ndef?.close()
+            if (ndef == null) {
+                // Tag is not NDEF formatted, try to read as raw data
+                return "Raw RFID Tag"
+            }
+            
+            ndef.connect()
+            val message = ndef.ndefMessage
+            ndef.close()
             
             message?.records?.firstOrNull()?.let { record ->
                 val payload = record.payload
@@ -111,9 +151,9 @@ class RFIDScanActivity : ComponentActivity() {
                 } else {
                     null
                 }
-            }
+            } ?: "Empty NDEF Tag"
         } catch (e: Exception) {
-            null
+            "RFID Tag (Raw Data)"
         }
     }
 }
@@ -123,7 +163,8 @@ class RFIDScanActivity : ComponentActivity() {
 fun RFIDScanScreen(
     viewModel: DrugViewModel,
     onBack: () -> Unit,
-    onScanComplete: (DrugInventory) -> Unit
+    onScanComplete: (DrugInventory) -> Unit,
+    scanResult: String? = null
 ) {
     val scanState by viewModel.scanState.collectAsState()
     val context = LocalContext.current
@@ -143,7 +184,7 @@ fun RFIDScanScreen(
                 title = { Text("RFID Scanner") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 }
             )
@@ -152,7 +193,9 @@ fun RFIDScanScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues),
+                .padding(paddingValues)
+                .verticalScroll(rememberScrollState()) // Make screen scrollable
+                .padding(bottom = 80.dp), // Add bottom padding to avoid navbar overlap
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
@@ -174,7 +217,7 @@ fun RFIDScanScreen(
                         verticalArrangement = Arrangement.Center
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Nfc,
+                            imageVector = Icons.Default.Contactless,
                             contentDescription = "NFC Scanner",
                             modifier = Modifier.size(80.dp),
                             tint = MaterialTheme.colorScheme.onPrimaryContainer
@@ -215,17 +258,52 @@ fun RFIDScanScreen(
                     )
                     Spacer(modifier = Modifier.height(12.dp))
                     InstructionItem(
-                        icon = Icons.Default.Nfc,
+                        icon = Icons.Default.Contactless,
                         text = "Ensure NFC is enabled on your device"
                     )
                     InstructionItem(
-                        icon = Icons.Default.TouchApp,
+                        icon = Icons.Default.Gesture,
                         text = "Hold RFID tag close to the NFC reader"
                     )
                     InstructionItem(
-                        icon = Icons.Default.Timer,
+                        icon = Icons.Default.Schedule,
                         text = "Keep tag steady until scan completes"
                     )
+                }
+            }
+            
+            // Scan Result Display
+            if (scanResult != null) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp)
+                    ) {
+                        Text(
+                            text = "Scan Result",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Scanned Data: $scanResult",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Scan Mode: RFID/NFC",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f)
+                        )
+                    }
                 }
             }
             
@@ -250,7 +328,7 @@ fun RFIDScanScreen(
                 ) {
                     Icon(
                         imageVector = when {
-                            scanState.isLoading -> Icons.Default.Sync
+                            scanState.isLoading -> Icons.Default.Refresh
                             scanState.error != null -> Icons.Default.Error
                             else -> Icons.Default.CheckCircle
                         },
