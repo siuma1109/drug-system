@@ -2,10 +2,6 @@
 
 A comprehensive medical data processing system that converts XML and HL7 medical data into structured database records, designed for healthcare data integration and drug management.
 
-## Overview
-
-This system is part of the Smart Drug Cabinet System development project for Grand Brilliance Group Holdings Limited. It provides a robust backend solution for processing medical data from various sources and converting it into standardized drug and patient records.
-
 ## Key Features
 
 ### 🏥 Medical Data Processing

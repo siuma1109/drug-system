@@ -221,10 +221,6 @@ Enable debug mode in `build.gradle.kts`:
 buildConfigField("boolean", "DEBUG", "true")
 ```
 
-## 📄 License
-
-This project is part of the Smart Drug Cabinet System for Grand Brilliance Group Holdings Limited.
-
 ## 👨‍💻 Developer Notes
 
 ### Code Style
@@ -246,5 +242,3 @@ This project is part of the Smart Drug Cabinet System for Grand Brilliance Group
 - Support multiple screen sizes
 
 ---
-
-**Built with ❤️ for Grand Brilliance Group Holdings Limited**
