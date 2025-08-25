@@ -373,7 +373,7 @@ fun startQRScanner(context: android.content.Context, launcher: androidx.activity
     val options = ScanOptions().apply {
         setDesiredBarcodeFormats(com.google.zxing.BarcodeFormat.QR_CODE.name)
         setPrompt("Scan QR code")
-        setCameraId(0)
+        setCameraId(1)
         setBeepEnabled(true)
         setBarcodeImageEnabled(true)
     }
