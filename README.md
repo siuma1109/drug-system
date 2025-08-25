@@ -218,3 +218,280 @@ The system is designed for easy extension:
 - **New Data Sources**: Extend repositories for additional data storage options
 - **New API Endpoints**: Follow existing patterns for new functionality
 - **New Validation Rules**: Add validation logic in the utils module
+
+## Mobile Integration
+
+### Android Companion App
+
+A dedicated Android application is being developed to provide mobile access to the Smart Drug Cabinet System. The app will enhance the system with real-time drug management and hardware integration capabilities.
+
+#### Key Features
+
+- **Real-time Drug Inventory**: View current drug stock levels and expiration dates
+- **RFID Scanning**: Scan drug packages using integrated RFID technology
+- **Bluetooth Device Integration**: Connect to medical devices for vital signs monitoring
+- **Patient Verification**: Verify patient identity before drug administration
+- **Offline Mode**: Continue operations without network connectivity
+- **Push Notifications**: Receive alerts for low stock, expiring drugs, and administration reminders
+
+#### Technology Stack
+
+- **Development Environment**: Android Studio with Java
+- **Architecture**: MVVM (Model-View-ViewModel) pattern
+- **Networking**: Retrofit for API communication
+- **Database**: Room database for local storage
+- **Hardware Integration**: Android Bluetooth API, RFID SDK integration
+- **UI/UX**: Material Design components with custom themes
+
+#### API Integration
+
+The Android app communicates with the Django backend through RESTful APIs:
+
+```
+Base URL: http://localhost:8000/api/
+
+Authentication:
+POST /auth/login/ - User authentication
+POST /auth/refresh/ - Token refresh
+
+Drug Management:
+GET /drugs/inventory/ - Get current drug inventory
+POST /drugs/scan/ - Scan drug via RFID
+PUT /drugs/update-stock/ - Update drug quantities
+
+Patient Management:
+GET /patients/list/ - Get patient list
+GET /patients/{id}/ - Get patient details
+POST /patients/verify/ - Verify patient identity
+
+Administration:
+POST /administration/record/ - Record drug administration
+GET /administration/history/ - Get administration history
+
+Device Management:
+GET /devices/rfid/status/ - RFID device status
+POST /devices/bluetooth/connect/ - Connect Bluetooth device
+GET /devices/bluetooth/list/ - List paired devices
+```
+
+#### RFID Integration
+
+The Android app supports multiple RFID reader types:
+
+```java
+// Sample RFID scanning implementation
+public class RFIDScanner {
+    private RFIDReader reader;
+    
+    public void startScanning() {
+        reader.connect();
+        reader.setTagListener(new TagListener() {
+            @Override
+            public void onTagDetected(String tagId) {
+                // Send to backend for verification
+                apiService.verifyDrugTag(tagId);
+            }
+        });
+    }
+}
+```
+
+#### Bluetooth Device Support
+
+Integration with medical devices via Bluetooth:
+
+```java
+// Bluetooth device connection
+public class BluetoothManager {
+    private BluetoothAdapter adapter;
+    
+    public void connectToDevice(String deviceAddress) {
+        BluetoothDevice device = adapter.getRemoteDevice(deviceAddress);
+        // Connect and stream vital signs data
+    }
+}
+```
+
+#### Offline Capabilities
+
+The app includes robust offline functionality:
+
+- **Local Database**: Store drug inventory and patient data locally
+- **Queue System**: Queue API calls when offline, sync when connected
+- **Conflict Resolution**: Handle data conflicts between local and server
+- **Data Encryption**: Secure local storage of sensitive medical data
+
+#### Security Features
+
+- **Biometric Authentication**: Fingerprint and face recognition
+- **Data Encryption**: End-to-end encryption for all communications
+- **Secure Storage**: Android Keystore for sensitive data
+- **Audit Trail**: Complete logging of all app activities
+
+#### Testing Strategy
+
+Comprehensive testing approach:
+
+- **Unit Tests**: JUnit for business logic testing
+- **Integration Tests**: Espresso for UI testing
+- **Hardware Tests**: Real device testing with RFID readers
+- **Performance Tests**: Load testing for concurrent users
+- **Security Tests**: Penetration testing and vulnerability assessment
+
+#### Deployment
+
+**Development Setup:**
+```bash
+# Clone Android repository
+git clone [android-repo-url]
+cd drug-system-android
+
+# Open in Android Studio
+android-studio .
+
+# Build and run on emulator or device
+./gradlew assembleDebug
+```
+
+**Release Management:**
+- **Beta Testing**: Google Play Beta testing track
+- **Production**: Google Play Store deployment
+- **Enterprise**: Private enterprise distribution for hospitals
+- **Updates**: Over-the-air update mechanism
+
+#### Future Enhancements
+
+- **iOS Companion App**: Develop iOS version for iPhone/iPad
+- **Wearable Integration**: Smartwatch support for alerts
+- **Voice Commands**: Google Assistant integration
+- **AR Features**: Augmented reality for drug cabinet visualization
+- **AI Integration**: Machine learning for drug interaction detection
+
+This mobile integration transforms the Smart Drug Cabinet System into a comprehensive healthcare solution that meets modern medical facility requirements while maintaining the robust Python/Django backend foundation.
+
+## New Mobile API Features
+
+### 🏥 Smart Drug Cabinet Management
+
+#### Real-Time RFID Integration
+- **Drug Scanning**: Scan RFID-tagged medications for instant verification
+- **Inventory Tracking**: Real-time stock level monitoring with automatic status updates
+- **Batch Management**: Track expiration dates, batch numbers, and manufacturer information
+- **Location Tracking**: Monitor drug locations across multiple storage cabinets
+- **Status Automation**: Automatic status updates (ACTIVE, LOW_STOCK, OUT_OF_STOCK, EXPIRED)
+
+#### Advanced Patient Management
+- **Identity Verification**: Multi-method patient verification (RFID, manual, biometric ready)
+- **Comprehensive Profiles**: Complete patient demographics and medical history
+- **Quick Lookup**: Fast patient search and retrieval
+- **Administration History**: Complete medication administration records
+- **Safety Checks**: Patient allergy and interaction screening ready
+
+### 💊 Drug Administration System
+
+#### Medication Administration Records
+- **Real-Time Recording**: Instant recording of drug administration
+- **Dosage Tracking**: Accurate dosage and route documentation
+- **Verification Methods**: Multiple verification methods (RFID, barcode, manual)
+- **Staff Accountability**: Complete audit trail with administrator identification
+- **Auto Inventory Updates**: Automatic stock reduction upon administration
+
+#### Administration Workflow
+1. **Patient Verification**: Confirm patient identity
+2. **Drug Scanning**: Verify medication via RFID
+3. **Dosage Confirmation**: Validate prescribed dosage
+4. **Administration Record**: Document administration details
+5. **Inventory Update**: Automatically update stock levels
+
+### 📡 Device Management System
+
+#### RFID Device Monitoring
+- **Real-Time Status**: Live monitoring of RFID reader connectivity
+- **Battery Management**: Battery level tracking and alerts
+- **Connection Health**: Device connection status and error monitoring
+- **Multi-Device Support**: Support for multiple RFID readers
+- **Maintenance Alerts**: Automated maintenance requirement notifications
+
+#### Bluetooth Device Integration
+- **Medical Device Connectivity**: Connect to Bluetooth medical devices
+- **Vital Signs Monitoring**: Real-time vital signs data collection
+- **Device Discovery**: Automatic device detection and pairing
+- **Connection Management**: Robust connection handling and reconnection
+- **Data Streaming**: Real-time medical data streaming capabilities
+
+### 🔄 Inventory Management
+
+#### Stock Control Operations
+- **Real-Time Updates**: Live inventory status updates
+- **Multiple Operations**: Set, add, or subtract quantities
+- **Automated Alerts**: Low stock and expiration notifications
+- **Batch Tracking**: Track medications by batch and expiration
+- **Location Management**: Multi-location inventory tracking
+
+#### Status Management
+- **Automatic Status Updates**: Smart status based on quantity and expiration
+- **Custom Thresholds**: Configurable low stock thresholds
+- **Expiration Tracking**: Automated expired medication identification
+- **Recall Management**: Drug recall status tracking
+- **Audit Trail**: Complete inventory change history
+
+### 📊 Advanced Reporting & Analytics
+
+#### Administration Analytics
+- **Usage Patterns**: Drug usage analytics and trends
+- **Staff Performance**: Administration efficiency metrics
+- **Patient Compliance**: Medication adherence tracking
+- **Error Reduction**: Administration error rate monitoring
+- **Cost Analysis**: Medication cost tracking and optimization
+
+#### Inventory Analytics
+- **Stock Optimization**: Inventory level optimization recommendations
+- **Expiration Management**: Expiration date analytics
+- **Usage Forecasting**: Predictive inventory requirements
+- **Cost Savings**: Waste reduction opportunities
+- **Compliance Reporting**: Regulatory compliance reporting
+
+### 🔒 Security & Compliance
+
+#### Data Protection
+- **End-to-End Encryption**: All data transmissions encrypted
+- **Audit Logging**: Complete audit trail of all operations
+- **Access Control**: Role-based access control ready
+- **Data Integrity**: Tamper-proof record keeping
+- **HIPAA Compliance**: Healthcare data protection standards
+
+#### Safety Features
+- **Patient Verification**: Multi-factor patient identification
+- **Drug Verification**: RFID-based medication verification
+- **Dosage Validation**: Automated dosage checking
+- **Allergy Screening**: Allergy and interaction screening ready
+- **Emergency Protocols**: Emergency medication access procedures
+
+### 🌐 API Endpoints Reference
+
+#### Drug Management APIs
+```bash
+GET    /api/drugs/inventory           # Get current drug inventory
+POST   /api/drugs/scan               # Scan drug via RFID
+PUT    /api/drugs/update-stock        # Update drug quantities
+```
+
+#### Patient Management APIs
+```bash
+GET    /api/patients/list            # Get patient list
+GET    /api/patients/{id}            # Get patient details
+POST   /api/patients/verify          # Verify patient identity
+```
+
+#### Administration APIs
+```bash
+POST   /api/administration/record     # Record drug administration
+GET    /api/administration/history    # Get administration history
+```
+
+#### Device Management APIs
+```bash
+GET    /api/devices/rfid/status       # Get RFID device status
+POST   /api/devices/bluetooth/connect # Connect Bluetooth device
+GET    /api/devices/bluetooth/list    # List paired devices
+```
